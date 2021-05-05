@@ -1,12 +1,12 @@
 import torch
 from IPython import embed
 
-try:
-    from shaper.models.pointnet2 import pn2_ext
-    #from pointnet2 import pn2_ext
-    #import pn2_ext
-except ImportError:
-    print('Please compile source files before using pointnet2 cuda extension.')
+# try:
+from shaper.models.pointnet2 import pn2_ext
+#from pointnet2 import pn2_ext
+#import pn2_ext
+# except ImportError:
+    # print('Please compile source files before using pointnet2 cuda extension.')
 
 
 #def select_points(points, index):
