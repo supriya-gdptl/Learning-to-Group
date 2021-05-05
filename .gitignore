@@ -32,3 +32,5 @@ dist/
 /data
 !/data/*.sh
 /outputs
+scheduler.sh
+*.out
