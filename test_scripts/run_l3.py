@@ -49,3 +49,4 @@ p.wait()
 p = Popen('python partnet/test.py --cfg test_configs/l3_table.yaml', shell=True)
 p.wait()
 print('success')
+

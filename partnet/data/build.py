@@ -160,12 +160,14 @@ def parse_augmentations(augmentations):
 def build_dataloader(cfg, mode='train'):
     assert mode in ['train', 'val', 'test']
     is_train = (mode == 'train')
+
     batch_size = cfg.TRAIN.BATCH_SIZE if is_train else cfg.TEST.BATCH_SIZE
 
     if cfg.TASK == 'ins_seg_3d':
         dataset = build_ins_seg_3d_dataset(cfg, mode)
     else:
         raise NotImplementedError('Unsupported task: {}'.format(cfg.TASK))
+
 
     if cfg.DATASET.TYPE == 'PartNetInsSeg':
         kwargs_dict = cfg.DATALOADER.KWARGS
@@ -213,7 +215,7 @@ def build_ins_seg_3d_dataset(cfg, mode='train'):
     transform = T.ComposeSeg(transform_list)
 
     kwargs_dict = cfg.DATASET[cfg.DATASET.TYPE].get(mode.upper(), dict())
-
+    
     if cfg.DATASET.TYPE == 'PartNetInsSeg':
         dataset = PartNetInsSeg(root_dir=cfg.DATASET.ROOT_DIR,
                                 transform=transform,

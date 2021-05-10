@@ -87,3 +87,4 @@ p = Popen('python3 compute_nosem_ap_fusion.py --category Vase --level_id 1', she
 p.wait()
 p = Popen('python3 compute_nosem_ap_fusion.py --category Vase --level_id 3', shell=True)
 p.wait()
+print('success')

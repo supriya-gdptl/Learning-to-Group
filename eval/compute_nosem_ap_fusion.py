@@ -18,11 +18,11 @@ FLAGS = parser.parse_args()
 
 gt_in_dir = '../data/partnet/ins_seg_h5_gt/%s-%d/' % (FLAGS.category, FLAGS.level_id)
 pred_dir = FLAGS.pred_dir
-
+print("\n\n compute_nosem_ap_fusion.py: ",os.path.abspath(os.path.join(pred_dir,FLAGS.category)))
 recalls = eval_recall_iou_nosem_fusion(gt_in_dir, os.path.join(pred_dir,FLAGS.category), iou_threshold=FLAGS.iou_threshold, plot_dir=FLAGS.plot_dir)
 print(recalls)
 print('mRecall %f'%np.mean(recalls))
-f = open('results.txt','a+')
-f.write('%s-%d: %.3f\n'%(FLAGS.category,FLAGS.level_id,np.mean(recalls)))
+f = open('results.csv','a+')
+f.write('%s-%d, %.4f\n'%(FLAGS.category,FLAGS.level_id,np.mean(recalls)))
 f.close()
 

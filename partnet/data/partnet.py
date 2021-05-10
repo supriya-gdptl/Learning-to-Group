@@ -37,10 +37,13 @@ class PartNetInsSeg(Dataset):
         self.folder_list = self._prepare_file_list(shape, level)
 
         self.cache = defaultdict(list)
+
         self.meta_data = []
         self._load_data()
         print('{:s}: with {} shapes'.format(
             self.__class__.__name__,  len(self.meta_data)))
+        
+
 
     def _load_cat_file(self):
         # Assume that the category file is put under root_dir.
@@ -63,7 +66,6 @@ class PartNetInsSeg(Dataset):
             shape_arr.append(shape)
         else:
             shape_arr = shape
-
         for shape in shape_arr:
             if shape is not None:
                 if level is not None:
@@ -99,6 +101,7 @@ class PartNetInsSeg(Dataset):
                         folder_path = folder_path.replace('for_detection', 'gt')
                         data_path = osp.join(folder_path, fname)
                         print('loading {}'.format(data_path))
+
                         with h5py.File(data_path, mode='r') as f:
                             num_samples = f['pts'].shape[0]
                             if self.cache_mode:

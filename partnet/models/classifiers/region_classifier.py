@@ -30,7 +30,7 @@ class RegionClassifier(nn.Module):
         self.head = build_head(head)
 
         self.reset_parameters()
-
+        
     def forward(self, data_batch):
         # neighbour_xyz, (batch_size, 3, num_centroids, num_neighbours)
         neighbour_xyz_purity = data_batch['neighbour_xyz_purity']

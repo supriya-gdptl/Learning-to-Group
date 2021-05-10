@@ -130,6 +130,10 @@ class KNNDistance(torch.autograd.Function):
         if transpose:
             query_xyz = query_xyz.transpose(1, 2)
             key_xyz = key_xyz.transpose(1, 2)
+        # print("\n\nquery_xyz shape: ", query_xyz.shape)
+        # print("\n\nkey_xyz shape: ", key_xyz.shape)
+        # print("\n\nquery_xyz: ", query_xyz)
+        # print("\n\nkey_xyz: ", key_xyz)
         index, distance = pn2_ext.knn_distance(query_xyz.contiguous(), key_xyz.contiguous(), num_neighbors)
         return index, distance
 

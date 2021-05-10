@@ -2,7 +2,7 @@ import os
 import sys
 import h5py
 import numpy as np
-from progressbar import ProgressBar
+# from progressbar import ProgressBar
 from commons import check_mkdir
 from IPython import embed
 from scipy.optimize import linear_sum_assignment
@@ -46,6 +46,7 @@ def load_pred_h5_nosem(fn):
         We only evaluate on the part predictions with valid = True.
         We assume no pre-sorting according to confidence score. 
     """
+    print("\n\neval_utils: ",os.path.abspath(fn))
     with h5py.File(fn, 'r') as fin:
         mask = fin['mask'][:]
         valid = fin['valid'][:]

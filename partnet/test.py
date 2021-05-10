@@ -149,6 +149,7 @@ def test(cfg, output_dir='', output_dir_merge='', output_dir_save=''):
     set_random_seed(cfg.RNG_SEED)
 
     NUM_POINT = 10000
+    print('test_dataloader is:', test_dataloader)
     n_shape = len(test_dataloader)
     NUM_INS = 200
     out_mask = np.zeros((n_shape, NUM_INS, NUM_POINT), dtype=np.bool)
@@ -174,7 +175,6 @@ def test(cfg, output_dir='', output_dir_merge='', output_dir_save=''):
         start_time = time.time()
         end = start_time
         for iteration, data_batch in enumerate(test_dataloader):
-            print(iteration)
 
             data_time = time.time() - end
             iter_start_time = time.time()
@@ -182,6 +182,7 @@ def test(cfg, output_dir='', output_dir_merge='', output_dir_save=''):
             data_batch = {k: v.cuda(non_blocking=True) for k, v in data_batch.items()}
 
             preds = model(data_batch)
+            
             loss_dict = loss_fn(preds, data_batch)
             meters.update(**loss_dict)
             val_metric.update_dict(preds, data_batch)

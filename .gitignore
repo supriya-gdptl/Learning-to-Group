@@ -34,3 +34,6 @@ dist/
 /outputs
 scheduler.sh
 *.out
+*.csv
+results/
+previous_results/
