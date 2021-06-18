@@ -118,13 +118,19 @@ def collate(batch, num_centroids, radius, num_neighbours,
         # ins_label, (batch_size, num_centroids, num_neighbours)
         ins_label = (neighbour_label == centroid_label.expand_as(neighbour_label)).long()
         valid_mask = ins_label.new_ones(ins_label.size())
+
         valid_mask[neighbour_label == 0] = 0
         valid_mask[centroid_label.expand_as(neighbour_label) == 0] = 0
+
         ins_label_purity = (neighbour_label_purity == centroid_label.expand_as(neighbour_label_purity)).long()
+
         purity_mask = (torch.sum(ins_label_purity,-1).float()/64 > 0.95)
+
         valid_mask[purity_mask.unsqueeze(-1).expand_as(neighbour_label) == 0] = 0
+        
         valid_center_mask = purity_mask.new_ones(purity_mask.size())
         valid_center_mask[purity_mask == 0] = 0
+        
         centroid_valid_mask = purity_mask.new_ones(purity_mask.size())
         centroid_valid_mask[purity_mask==0] = 0
         centroid_valid_mask[centroid_label.squeeze(-1) == 0] =0

@@ -2,6 +2,7 @@ from subprocess import Popen
 
 p = Popen('python partnet/test.py --cfg test_configs/l3_bed.yaml', shell=True)
 p.wait()
+
 p = Popen('python partnet/test.py --cfg test_configs/l3_bag.yaml', shell=True)
 p.wait()
 p = Popen('python partnet/test.py --cfg test_configs/l3_clock.yaml', shell=True)

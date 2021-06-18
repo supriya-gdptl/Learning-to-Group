@@ -36,13 +36,16 @@ class RegionClassifier(nn.Module):
         neighbour_xyz_purity = data_batch['neighbour_xyz_purity']
         batch_size, _, num_centroids, num_neighbours = neighbour_xyz_purity.size()
         neighbour_xyz_purity = neighbour_xyz_purity.transpose(1, 2).contiguous().view(batch_size*num_centroids, 3, num_neighbours)
+
         preds = self.backbone1(neighbour_xyz_purity)
+
         center_feature = preds['cls_logit']
         #center_feature = (self.backbone2(neighbour_xyz_purity)).pop('feature')
         #center_feature,_ = torch.max(center_feature, -1)
 
         node_logit = preds['node_logit']
         node_loss = nn.CrossEntropyLoss()(node_logit, data_batch['valid_center_mask'].view(-1).long())
+        
         _, node_pred = torch.max(node_logit,1)
         node_acc_arr = (node_pred.float()==data_batch['valid_center_mask'].view(-1).float()).float()
         node_acc = torch.mean(node_acc_arr)
@@ -56,11 +59,15 @@ class RegionClassifier(nn.Module):
         batch_size, _, num_centroids, num_neighbours = neighbour_xyz.size()
         neighbour_xyz = neighbour_xyz.transpose(1, 2).contiguous().view(batch_size*num_centroids, 3, num_neighbours)
         backbone_output = self.backbone2(neighbour_xyz)
+        
         neighbour_feature = backbone_output.pop('feature')
+        
         feature_list = list()
         feature_list.append(neighbour_feature)
         feature_list.append(center_feature.unsqueeze(-1).expand_as(neighbour_feature))
+        
         ins_logit = self.head(feature_list)
+        
         ins_logit = ins_logit.view(batch_size, num_centroids, ins_logit.size(1), num_neighbours).transpose(1, 2).contiguous()
 
         ## neighbour_index, (batch_size, num_centroids, num_neighbours), input space
