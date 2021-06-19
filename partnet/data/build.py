@@ -63,42 +63,42 @@ def collate(batch, num_centroids, radius, num_neighbours,
             _, select_centroid_index = neighbour_centroid_dist.topk(num_centroids//2, largest=False)
             centroid_index = centroid_index.gather(1, select_centroid_index)
         else:
-            centroid_index = _F.farthest_point_sample(xyz, num_centroids)
+            centroid_index = _F.farthest_point_sample(xyz, num_centroids)  # returns index of 128 centroid points out of 10000 points from original point cloud. size=(batch_size, 128)
         # (batch_size, 3, num_centroids)
         centroid_xyz = _F.gather_points(xyz, centroid_index)
 
         # (batch_size, num_centroids, num_neighbours)
         neighbour_index, _ = _F.ball_query(xyz, centroid_xyz, radius, num_neighbours)
-
+        # get 64 points within radius of 0.03. This will be the smaller inner circle
         neighbour_index_purity, _ = _F.ball_query(xyz, centroid_xyz, 0.03, 64)
         neighbour_xyz_purity = _F.group_points(xyz, neighbour_index_purity)
         batch_size, num_centroids, num_neighbours = neighbour_index_purity.size()
         neighbour_label_purity = ins_id.gather(1, neighbour_index_purity.view(batch_size, num_centroids*num_neighbours))
-        neighbour_label_purity = neighbour_label_purity.view(batch_size, num_centroids, num_neighbours)
+        neighbour_label_purity = neighbour_label_purity.view(batch_size, num_centroids, num_neighbours)  # get ground truth labels of points in the oinner circle
 
         # (batch_size, 3, num_centroids, num_neighbours)
-        neighbour_xyz = _F.group_points(xyz, neighbour_index)
+        neighbour_xyz = _F.group_points(xyz, neighbour_index)  # returns coord associated with index
 
         # TODO resample centroid_xyz and centroid_index var to stand for new centroid point
         # (batch_size, num_centroids)
         if with_resample:
             neighbour_centroid_index = torch.randint_like(centroid_index, low=0, high=num_neighbours)
         else:
-            neighbour_centroid_index = (neighbour_xyz - centroid_xyz.unsqueeze(-1)).abs().sum(1).argmin(dim=-1)
+            neighbour_centroid_index = (neighbour_xyz - centroid_xyz.unsqueeze(-1)).abs().sum(1).argmin(dim=-1)  # find a point in bigger circle closest to originally sampled centroids
 
-        resample_centroid_index = neighbour_index.gather(2, neighbour_centroid_index.unsqueeze(-1)).squeeze(-1)
+        resample_centroid_index = neighbour_index.gather(2, neighbour_centroid_index.unsqueeze(-1)).squeeze(-1)  # get index of new centroids
 
         # (batch_size, 3, num_centroids)
-        resample_centroid_xyz = _F.gather_points(xyz, resample_centroid_index)
+        resample_centroid_xyz = _F.gather_points(xyz, resample_centroid_index)  # get actual xyz coord of new centroids
 
-        # translation normalization
+        # translation normalization. i.e shift rcenter patches i.e. normalize coords of smaller(purity) cicle and bigger circle
         centroid_mean = torch.mean(neighbour_xyz, -1).clone()
         neighbour_xyz -= centroid_mean.unsqueeze(-1)
         neighbour_xyz_purity -= centroid_mean.unsqueeze(-1)
         #neighbour_xyz -= centroid_xyz.unsqueeze(-1)
-        resample_centroid_xyz -= centroid_xyz
+        resample_centroid_xyz -= centroid_xyz  # recenter new centroids according to original centroids
 
-        if with_renorm:
+        if with_renorm:  # scale i.e get points within unit circle
             norm_factor = neighbour_xyz.norm(dim=1).max()
             neighbour_xyz /= norm_factor
             resample_centroid_xyz /= norm_factor
@@ -109,31 +109,31 @@ def collate(batch, num_centroids, radius, num_neighbours,
             resample_centroid_xyz += shift
 
         batch_size, num_centroids, num_neighbours = neighbour_index.size()
-        # neighbour_label, (batch_size, num_centroids, num_neighbours)
+        # neighbour_label, (batch_size, num_centroids, num_neighbours). Get ground truth labels of bigger circle points
         neighbour_label = ins_id.gather(1, neighbour_index.view(batch_size, num_centroids*num_neighbours))
         neighbour_label = neighbour_label.view(batch_size, num_centroids, num_neighbours)
 
-        # centroid_label, (batch_size, num_centroids, 1)
+        # centroid_label, (batch_size, num_centroids, 1). Get centroid label ground truth
         centroid_label = ins_id.gather(1, resample_centroid_index).view(batch_size, num_centroids, 1)
-        # ins_label, (batch_size, num_centroids, num_neighbours)
+        # ins_label, (batch_size, num_centroids, num_neighbours). Current Patch instance segmentation ground truth label. Binary mask that is set to 1 when neighbor sample has same label as center label
         ins_label = (neighbour_label == centroid_label.expand_as(neighbour_label)).long()
-        valid_mask = ins_label.new_ones(ins_label.size())
+        valid_mask = ins_label.new_ones(ins_label.size())  # (batch_size, num_centroid, num_neighbor)returns mask filled with 1 of size as argument tensor
 
-        valid_mask[neighbour_label == 0] = 0
-        valid_mask[centroid_label.expand_as(neighbour_label) == 0] = 0
-
+        valid_mask[neighbour_label == 0] = 0  # set mask to zero when neighbor label is 0
+        valid_mask[centroid_label.expand_as(neighbour_label) == 0] = 0  # also set mask to zero, where centroid label is zero
+        # smaller circle mask which has 1 when centroid label same as smaller circle point label
         ins_label_purity = (neighbour_label_purity == centroid_label.expand_as(neighbour_label_purity)).long()
 
-        purity_mask = (torch.sum(ins_label_purity,-1).float()/64 > 0.95)
+        purity_mask = (torch.sum(ins_label_purity,-1).float()/64 > 0.95)  # (batch_size, 128) smaller circle flag(i think)
 
-        valid_mask[purity_mask.unsqueeze(-1).expand_as(neighbour_label) == 0] = 0
+        valid_mask[purity_mask.unsqueeze(-1).expand_as(neighbour_label) == 0] = 0  # wherever purity mask is zero, set valid_mask to zero
         
-        valid_center_mask = purity_mask.new_ones(purity_mask.size())
+        valid_center_mask = purity_mask.new_ones(purity_mask.size())  # (batch_size, num_centroid)inner circle mask
         valid_center_mask[purity_mask == 0] = 0
         
         centroid_valid_mask = purity_mask.new_ones(purity_mask.size())
         centroid_valid_mask[purity_mask==0] = 0
-        centroid_valid_mask[centroid_label.squeeze(-1) == 0] =0
+        centroid_valid_mask[centroid_label.squeeze(-1) == 0] =0  # (batch_size, num_centroid)centroid mask
 
         data_batch['neighbour_xyz'] = neighbour_xyz
         data_batch['neighbour_xyz_purity'] = neighbour_xyz_purity
@@ -233,4 +233,4 @@ def build_ins_seg_3d_dataset(cfg, mode='train'):
     else:
         raise ValueError('Unsupported type of dataset.')
 
-    return dataset
+    return dataset  # return object of class PartNetInsSeg

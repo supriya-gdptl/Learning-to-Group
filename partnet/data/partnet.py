@@ -16,7 +16,7 @@ from IPython import embed
 
 
 class PartNetInsSeg(Dataset):
-    cat_file = './shape_names.txt'
+    cat_file = '../shape_names.txt'
 
     def __init__(self,
                  root_dir,
@@ -103,6 +103,7 @@ class PartNetInsSeg(Dataset):
                         print('loading {}'.format(data_path))
 
                         with h5py.File(data_path, mode='r') as f:
+                            print(list(f.keys()))
                             num_samples = f['pts'].shape[0]
                             if self.cache_mode:
                                 # point cloud [N, 10000, 3]
@@ -126,6 +127,7 @@ class PartNetInsSeg(Dataset):
                         data_path = osp.join(folder_path, fname)
                         print('loading {}'.format(data_path))
                         with h5py.File(data_path, mode='r') as f:
+                            print("HDF5 keys: ",list(f.keys())) # ['gt_label', 'gt_mask', 'gt_other_mask', 'gt_valid', 'pts']
                             num_samples = f['pts'].shape[0]
                             if self.cache_mode:
                                 # point cloud [N, 10000, 3]
@@ -153,7 +155,7 @@ class PartNetInsSeg(Dataset):
                             self.meta_data[len(self.meta_data) - num_samples + ind].update(
                                 meta_data_list[ind]
                             )
-
+        # converting list of size 9 (5 Chair-3 hdf5 files, 2 Lamp-3 files, 2 StorageFurniture-3 files) of data collected from different hdf5 files into one single numpy array
         for k, v in self.cache.items():
             self.cache[k] = np.concatenate(v, axis=0)
 

@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument(
         '--cfg',
         dest='config_file',
-        default='',
+        default='../configs/pn_stage1_fusion.yaml',
         metavar='FILE',
         help='path to config file',
         type=str,
@@ -276,7 +276,7 @@ def main():
         config_path = osp.splitext(args.config_file)[0]
         config_path = config_path.replace('configs', 'outputs')
         output_dir = output_dir.replace('@', config_path)
-        output_dir = osp.join('outputs/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
+        output_dir = osp.join('../outputs_debug/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
         os.makedirs(output_dir, exist_ok=True)
 
     logger = setup_logger('shaper', output_dir, prefix='train')
