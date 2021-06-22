@@ -181,7 +181,7 @@ class PartNetInsSeg(Dataset):
 
         # 0 for ignore
         gt_all_mask = np.concatenate([gt_other_mask[None, :], gt_mask], axis=0)
-        ins_id = gt_all_mask.argmax(axis=0)
+        ins_id = gt_all_mask.argmax(axis=0)  # for each of 10k points, get part label id [0,1,2...]
 
         if self.normalize:
             points = normalize_points_np(points)

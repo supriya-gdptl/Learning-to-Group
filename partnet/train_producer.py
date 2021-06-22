@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         '--cfg',
         dest='config_file',
-        default='',
+        default='../configs/pn_stage2_fusion_l3.yaml',
         metavar='FILE',
         help='path to config file',
         type=str,
@@ -157,9 +157,8 @@ def train_one_epoch(model,
     print('load checkpoint from %s'%cur_checkpoint)
     model_merge.eval()
     for iteration, data_batch in enumerate(dataloader):
-        print('epoch: %d, iteration: %d, size of binary: %d, size of context: %d'%(cur_epoch, iteration, len(xyz_pool1), len(context_xyz_pool1)))
-        sys.stdout.flush()
-    #add conditions
+        # print('epoch: %d, iteration: %d, size of binary: %d, size of context: %d'%(cur_epoch, iteration, len(xyz_pool1), len(context_xyz_pool1)))
+        # sys.stdout.flush()
         if os.path.exists(checkpoint_txt):
             checkpoint_f = open(checkpoint_txt,'r')
             new_checkpoint = checkpoint_f.read()
@@ -192,7 +191,8 @@ def train_one_epoch(model,
 
         data_batch = {k: v.cuda(non_blocking=True) for k, v in data_batch.items()}
 
-        #predict box's coords
+        # Predict the subpart from pre-trained pointnet instance segmentation
+        # get sub-part proposals
         with torch.no_grad():
             preds = model(data_batch)
             loss_dict = loss_fn(preds, data_batch)
@@ -207,22 +207,28 @@ def train_one_epoch(model,
         num_points = data_batch['points'].shape[-1]
 
         #batch_size, num_centroid, num_neighbor
+        # get sub-part predicted by sub-part proposal network
         _, p = torch.max(preds['ins_logit'], 1)
         box_index_expand = torch.zeros((batch_size*num_centroids, num_points)).cuda()
-        box_index_expand = box_index_expand.scatter_(dim=1, index=data_batch['neighbour_index'].reshape([-1, num_neighbours]), src=p.reshape([-1, num_neighbours]).float())
+        # create one-hot encoding based on predictions 'p' from sub-part proposal network
+        box_index_expand = box_index_expand.scatter_(dim=1, index=data_batch['neighbour_index'].reshape([-1, num_neighbours]), src=p.reshape([-1, num_neighbours]).float()) # p.reshape()=[(batch_size*num_centroid), num_neighbor]=(8*128, 512)
         centroid_label = data_batch['centroid_label'].reshape(-1)
-
+        # create binary mask of size num_points=10k, set the predicted value of 'p' at indices 'neighbour_index'. i.e create sub-part mask for entire object point cloud
         #remove proposal < minimum_num
         minimum_box_pc_num = 8
         minimum_overlap_pc_num = 8 #1/32 * num_neighbour
+        # minimum size of mask is 8 points. i.e. there should at least 8 points in one subpart mask
         gtmin_mask = (torch.sum(box_index_expand, dim=-1) > minimum_box_pc_num)
 
-        #remove proposal whose purity score < 0.8
+        #remove proposal whose purity score < 0.8.
+        # 200=number of part per model in PartNet, so this method also predicts 200 parts per model
         box_label_expand = torch.zeros((batch_size*num_centroids, 200)).cuda()
+        # repeat ground truth part label ids(batch_size, 10k) for num_centroid times to give (batch_size*num_centroid, 10k) part label ids
         box_idx_expand = tile(data_batch['ins_id'],0,num_centroids).cuda()
+        # important line
         box_label_expand = box_label_expand.scatter_add_(dim=1, index=box_idx_expand, src=box_index_expand).float()
         maximum_label_num, maximum_label = torch.max(box_label_expand, 1)
-        centroid_label = maximum_label
+        centroid_label = maximum_label  # centroid labels
         total_num = torch.sum(box_label_expand, 1)
         box_purity = maximum_label_num / (total_num+1e-6)
         box_purity_mask = box_purity > 0.8
@@ -234,7 +240,7 @@ def train_one_epoch(model,
         centroid_valid_mask = data_batch['centroid_valid_mask'].reshape(-1).long()
         meters.update(centroid_valid_purity_ratio = torch.sum(torch.index_select(box_purity_mask, dim=0, index=centroid_valid_mask.nonzero().squeeze())).float()/torch.sum(centroid_valid_mask),centroid_nonvalid_purity_ratio = torch.sum(torch.index_select(box_purity_mask, dim=0, index=(1-centroid_valid_mask).nonzero().squeeze())).float()/torch.sum(1-centroid_valid_mask))
 
-        #update pool by valid_mask
+        # update pool by valid_mask
         valid_mask = gtmin_mask.long() *  box_purity_mask.long() * (centroid_label!=0).long()
         centroid_label = torch.index_select(centroid_label, dim=0, index=valid_mask.nonzero().squeeze())
         box_index_expand = torch.index_select(box_index_expand, dim=0, index=valid_mask.nonzero().squeeze())
@@ -245,6 +251,7 @@ def train_one_epoch(model,
         pc_all = data_batch['points']
         centroid_label_all = centroid_label.clone()
 
+        # for each shape point cloud, generate trajectory of grouping the parts
         for i in range(pc_all.shape[0]):
             bs = policy_total_bs
             BS = policy_update_bs
@@ -268,8 +275,10 @@ def train_one_epoch(model,
 
             small_flag = False
 
+            # Use policy network (purity module + rectification module) to ick the pair of sub-parts
             model_merge.eval()
             with torch.no_grad():
+                # merge the parts till there no merge-able parts available
                 while pair_idx.shape[0] > 0:
                     #when there are too few pairs, we calculate the policy score matrix on all pairs
                     if pair_idx.shape[0] <= BS and small_flag == False:
@@ -282,28 +291,35 @@ def train_one_epoch(model,
                         policy_pool = torch.zeros([0]).float().cuda()
                         for k in range(int(np.ceil(idx.shape[0]/bsp))):
                             sub_part_idx = torch.index_select(pair_idx, dim=0, index=idx[k*bsp:(k+1)*bsp])
+
+                            # get predictions from purity module of policy network
                             part_xyz1 = torch.index_select(cur_xyz_pool, dim=0, index=sub_part_idx[:,0])
                             part_xyz2 = torch.index_select(cur_xyz_pool, dim=0, index=sub_part_idx[:,1])
                             part_xyz = torch.cat([part_xyz1,part_xyz2],-1)
                             part_xyz -= torch.mean(part_xyz,-1).unsqueeze(-1)
                             part_norm = part_xyz.norm(dim=1).max(dim=-1)[0].unsqueeze(-1).unsqueeze(-1)
                             part_xyz /= part_norm
+                            # get scores from purity module
                             logits_purity = model_merge(part_xyz, 'purity').squeeze()
                             if len(logits_purity.shape) == 0:
                                 logits_purity = logits_purity.unsqueeze(0)
                             purity_pool = torch.cat([purity_pool, logits_purity], dim=0)
 
+                            # use rectification module of policy network
+                            # rectification module is named as 'policy' and 'policy_head' in this code (ref: partnet/models/pn2.py)
                             part_xyz11 = part_xyz1 - torch.mean(part_xyz1,-1).unsqueeze(-1)
                             part_xyz22 = part_xyz2 - torch.mean(part_xyz2,-1).unsqueeze(-1)
                             part_xyz11 /= part_norm
                             part_xyz22 /= part_norm
                             logits11 = model_merge(part_xyz11, 'policy')
                             logits22 = model_merge(part_xyz22, 'policy')
+                            # get scores from rectification module
                             policy_scores = model_merge(torch.cat([logits11, logits22],dim=-1), 'policy_head').squeeze()
                             if len(policy_scores.shape) == 0:
                                 policy_scores = policy_scores.unsqueeze(0)
                             policy_pool = torch.cat([policy_pool, policy_scores], dim=0)
 
+                        # use purity score and rectification score to choose a pair of sub-parts
                         purity_matrix[pair_idx[:,0],pair_idx[:,1]] = purity_pool
                         policy_matrix[pair_idx[:,0],pair_idx[:,1]] = policy_pool
                         score_matrix = torch.zeros(purity_matrix.shape).cuda()
@@ -314,40 +330,56 @@ def train_one_epoch(model,
                     if pair_idx.shape[0] > BS and small_flag != True:
                         perm_idx = torch.randperm(pair_idx.shape[0]).cuda()
                         perm_idx_rnd = perm_idx[:bs]
+                        # get purity score
                         sub_part_idx = torch.index_select(pair_idx, dim=0, index=perm_idx[:int(BS)])
                         part_xyz1 = torch.index_select(cur_xyz_pool, dim=0, index=sub_part_idx[:,0])
                         part_xyz2 = torch.index_select(cur_xyz_pool, dim=0, index=sub_part_idx[:,1])
+                        # merged part  ## WANT TO DISPLAY AND SEE
                         part_xyz = torch.cat([part_xyz1,part_xyz2],-1)
+                        # normalize merged sub-part
                         part_xyz -= torch.mean(part_xyz,-1).unsqueeze(-1)
                         part_norm = part_xyz.norm(dim=1).max(dim=-1)[0].unsqueeze(-1).unsqueeze(-1)
                         part_xyz /= part_norm
+                        # get purity score
+                        # initially all values are around 0.49, becoz purity module has sigmoid activation at the end
                         logits_purity = model_merge(part_xyz, 'purity').squeeze()
                         sub_policy_purity_pool = torch.cat([sub_policy_purity_pool, logits_purity.detach().unsqueeze(0).clone()],dim=0)
 
+                        # get rectification score
+                        # normalize individual sub-parts
                         part_xyz11 = part_xyz1 - torch.mean(part_xyz1,-1).unsqueeze(-1)
                         part_xyz22 = part_xyz2 - torch.mean(part_xyz2,-1).unsqueeze(-1)
                         part_xyz11 /= part_norm
                         part_xyz22 /= part_norm
                         logits11 = model_merge(part_xyz11, 'policy')
                         logits22 = model_merge(part_xyz22, 'policy')
+                        # get rectification scores
                         policy_scores = model_merge(torch.cat([logits11, logits22],dim=-1), 'policy_head').squeeze()
+
+                        # save the selected pair of sub-parts into policy_pool
                         sub_policy_xyz_pool1 = torch.cat([sub_policy_xyz_pool1, part_xyz11.unsqueeze(0).clone()], dim=0)
                         sub_policy_xyz_pool2 = torch.cat([sub_policy_xyz_pool2, part_xyz22.unsqueeze(0).clone()], dim=0)
+                        # once the pool is more than 64, add current sub-part to global policy pool and reinitalize subpart pool
                         if sub_policy_xyz_pool1.shape[0] > 64:
                             policy_xyz_pool1 = torch.cat([policy_xyz_pool1, sub_policy_xyz_pool1.cpu().clone()], dim=0)
                             policy_xyz_pool2 = torch.cat([policy_xyz_pool2, sub_policy_xyz_pool2.cpu().clone()], dim=0)
                             sub_policy_xyz_pool1 = torch.zeros([0,policy_update_bs,3,1024]).float().cuda()
                             sub_policy_xyz_pool2 = torch.zeros([0,policy_update_bs,3,1024]).float().cuda()
+                        # calculate final policy score = purity_score*policy_score.
+                        # this score will be used later to select which pair to merge
                         score = softmax(logits_purity*policy_scores)
 
+                        # calculate policy reward and loss
                         part_label1 = torch.index_select(centroid_label, dim=0, index=sub_part_idx[:,0])
                         part_label2 = torch.index_select(centroid_label, dim=0, index=sub_part_idx[:,1])
+                        # calculate policy reward = Reward is set to 1 if two sub-parts have same instance label and purity score is more than 0.8
                         siamese_label_gt = (part_label1 == part_label2)*(1 - (part_label1 == -1))*(1 - (part_label2 == -1))*(logits_purity>0.8)
                         sub_policy_reward_pool = torch.cat([sub_policy_reward_pool, siamese_label_gt.unsqueeze(0).float().clone()], dim=0)
+                        # initial policy loss is neg zero, because siamese_label_gt is zero vector, becoz logits_purity is less than 0.8 in first iteration
                         loss_policy = -torch.sum(score*(siamese_label_gt.float()))
                         meters.update(loss_policy =loss_policy)
 
-                        #we also introduce certain random samples to encourage exploration
+                        # we also introduce certain random samples to encourage exploration
                         _, rank_idx = torch.topk(score,bs,largest=True,sorted=False)
                         perm_idx = perm_idx[rank_idx]
                         perm_idx = torch.cat([perm_idx[:policy_total_bs-rnum], perm_idx_rnd[:rnum]], dim=0)
@@ -355,6 +387,7 @@ def train_one_epoch(model,
                             perm_idx = torch.randperm(pair_idx.shape[0]).cuda()
                             perm_idx = perm_idx[:policy_total_bs]
                     else:
+                        #else, we select a pair with highest policy score
                         score = score_matrix[pair_idx[:,0],pair_idx[:,1]]
                         _, rank_idx = torch.topk(score,1,largest=True,sorted=False)
                         perm_idx = rank_idx
@@ -366,19 +399,24 @@ def train_one_epoch(model,
                             perm_idx = perm_idx[:1]
 
                     #send the selected pairs into verification network
+                    # get sub-part indices
                     sub_part_idx = torch.index_select(pair_idx, dim=0, index=perm_idx[:bs])
+                    # get corresponding sub-part coord, mask, label
                     part_xyz1 = torch.index_select(cur_xyz_pool, dim=0, index=sub_part_idx[:,0])
                     part_xyz2 = torch.index_select(cur_xyz_pool, dim=0, index=sub_part_idx[:,1])
                     part_mask11 = torch.index_select(cur_mask_pool, dim=0, index=sub_part_idx[:,0])
                     part_mask22 = torch.index_select(cur_mask_pool, dim=0, index=sub_part_idx[:,1])
                     part_label1 = torch.index_select(centroid_label, dim=0, index=sub_part_idx[:,0])
                     part_label2 = torch.index_select(centroid_label, dim=0, index=sub_part_idx[:,1])
+                    # create new mask
                     new_part_mask = 1-(1-part_mask11)*(1-part_mask22)
                     box_label_expand = torch.zeros((new_part_mask.shape[0], 200)).cuda()
+                    # get ground truth label ids for the points in new part mask
                     box_idx_expand = tile(data_batch['ins_id'][i].unsqueeze(0),0,new_part_mask.shape[0]).cuda()
                     box_label_expand = box_label_expand.scatter_add_(dim=1, index=box_idx_expand, src=new_part_mask).float()
                     maximum_label_num, maximum_label = torch.max(box_label_expand, 1)
                     total_num = torch.sum(box_label_expand, 1)
+                    # calculate purity of the new merged part
                     box_purity = maximum_label_num / (total_num+1e-6)
                     sub_purity_pool = torch.cat([sub_purity_pool, box_purity.clone()], dim=0)
                     purity_xyz, xyz_mean = mask_to_xyz(pc, new_part_mask)
@@ -390,12 +428,12 @@ def train_one_epoch(model,
                     negative_num += torch.sum(siamese_label_gt == 0)
                     positive_num += torch.sum(siamese_label_gt == 1)
 
-                    #save data
+                    # save sub-parts to trajectory
                     sub_xyz_pool1 = torch.cat([sub_xyz_pool1, part_xyz1.clone()], dim=0)
                     sub_xyz_pool2 = torch.cat([sub_xyz_pool2, part_xyz2.clone()], dim=0)
                     sub_label_pool = torch.cat([sub_label_pool, siamese_label_gt.clone().float()], dim=0)
 
-                    #renorm
+                    # renorm
                     part_xyz = torch.cat([part_xyz1,part_xyz2],-1)
                     part_xyz -= torch.mean(part_xyz,-1).unsqueeze(-1)
                     part_xyz11 = part_xyz1 - torch.mean(part_xyz1,-1).unsqueeze(-1)
@@ -423,24 +461,26 @@ def train_one_epoch(model,
                     #at the very beginning, we group pairs according to ground-truth
                     if (cur_epoch == 1 and iteration < 128) or (cur_checkpoint == 'no_checkpoint'):
                         siamese_label = (part_label1 == part_label2)
-                    #if we have many sub-parts in the pool, we use the binary branch to predict
+                    #if we have many sub-parts in the pool, we use the binary branch in verification network to predict(Ref: fig4 in paper)
                     elif cur_xyz_pool.shape[0] > 32:
                         logits1 = model_merge(part_xyz11,'backbone')
                         logits2 = model_merge(part_xyz22,'backbone')
                         merge_logits = model_merge(torch.cat([part_xyz, torch.cat([logits1.unsqueeze(-1).expand(-1,-1,part_xyz1.shape[-1]), logits2.unsqueeze(-1).expand(-1,-1,part_xyz2.shape[-1])], dim=-1)], dim=1), 'head')
+                        # siamese label gives prediction whether we should group the sub-parts or not
                         _, p = torch.max(merge_logits, 1)
                         siamese_label = p
-                    #if there are too few sub-parts in the pool, we use the context branch to predict
+                    #if there are too few sub-parts in the pool, we use the context branch in verification network to predict(Ref Fig4 in paper)
                     else:
                         logits1 = model_merge(part_xyz11,'backbone')
                         logits2 = model_merge(part_xyz22,'backbone')
                         context_logits = model_merge(context_xyz,'backbone2')
                         merge_logits = model_merge(torch.cat([part_xyz, torch.cat([logits1.unsqueeze(-1).expand(-1,-1,part_xyz1.shape[-1]), logits2.unsqueeze(-1).expand(-1,-1,part_xyz2.shape[-1])], dim=-1), torch.cat([context_logits.unsqueeze(-1).expand(-1,-1,part_xyz.shape[-1])], dim=-1)], dim=1), 'head2')
+                        # siamese label gives prediction whether we should group the sub-parts or not
                         _, p = torch.max(merge_logits, 1)
                         siamese_label = p
 
-
-                    #group sub-parts according to the prediction
+                    # siamese label from above gives prediction whether we should group the sub-parts or not
+                    #group sub-parts according to the prediction.
                     merge_idx1 = torch.index_select(sub_part_idx[:,0], dim=0, index=siamese_label.nonzero().squeeze())
                     merge_idx2 = torch.index_select(sub_part_idx[:,1], dim=0, index=siamese_label.nonzero().squeeze())
                     merge_idx = torch.unique(torch.cat([merge_idx1, merge_idx2], dim=0))
@@ -538,6 +578,8 @@ def train_one_epoch(model,
                         score_matrix[score_idx[:,0], score_idx[:,1]] = softmax(purity_matrix[score_idx[:,0], score_idx[:,1]] * policy_matrix[score_idx[:,0], score_idx[:,1]])
                 final_pool_size = negative_num + positive_num
                 meters.update(final_pool_size=final_pool_size,negative_num=negative_num, positive_num=positive_num)
+
+        # after trajectory for all shapes is computed, save it to buffer
         xyz_pool1 = torch.cat([xyz_pool1, sub_xyz_pool1.cpu().clone()],dim=0)
         xyz_pool2 = torch.cat([xyz_pool2, sub_xyz_pool2.cpu().clone()],dim=0)
         label_pool = torch.cat([label_pool, sub_label_pool.cpu().clone()], dim=0)
@@ -554,7 +596,7 @@ def train_one_epoch(model,
         policy_xyz_pool2 = torch.cat([policy_xyz_pool2, sub_policy_xyz_pool2.cpu().clone()], dim=0)
         produce_time = time.time() - end
 
-        #condition
+        # save the trajectory to buffer.pth
         if context_xyz_pool1.shape[0] > 10000:
             rbuffer = dict()
             rbuffer['xyz_pool1'] = xyz_pool1
@@ -571,6 +613,8 @@ def train_one_epoch(model,
             rbuffer['policy_reward_pool'] = policy_reward_pool
             rbuffer['policy_xyz_pool1'] = policy_xyz_pool1
             rbuffer['policy_xyz_pool2'] = policy_xyz_pool2
+
+            # save the trajectory to buffer.pth
             torch.save(rbuffer, os.path.join(output_dir_merge, 'buffer', '%d_%d.pt'%(cur_epoch, iteration)))
             buffer_f = open(buffer_txt, 'w')
             buffer_f.write('%d_%d'%(cur_epoch, iteration))
@@ -579,6 +623,7 @@ def train_one_epoch(model,
             old_iteration = iteration
             p = Popen('rm -rf %s_*'%(os.path.join(output_dir_merge, 'buffer', '%d'%(cur_epoch-1))), shell=True)
 
+            # reinitialize the buffer
             xyz_pool1 = torch.zeros([0,3,1024]).float()
             xyz_pool2 = torch.zeros([0,3,1024]).float()
             context_xyz_pool1 = torch.zeros([0,3,1024]).float()
@@ -634,6 +679,7 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
     model = nn.DataParallel(model).cuda()
 
     model_merge = nn.DataParallel(PointNetCls(in_channels=3, out_channels=128)).cuda()
+    logger.info("MODEL_MERGE:\n{}".format(str(model_merge)))
 
     # build optimizer
     optimizer = build_optimizer(cfg, model)
@@ -678,7 +724,7 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
     tensorboard_logger = TensorboardLogger(output_dir_merge)
 
     # train
-    max_epoch = 20000
+    max_epoch = 2  # 20000
     start_epoch = checkpoint_data_embed.get('epoch', 0)
     best_metric_name = 'best_{}'.format(cfg.TRAIN.VAL_METRIC)
     best_metric = checkpoint_data_embed.get(best_metric_name, None)
@@ -721,10 +767,10 @@ def main():
     # replace '@' with config path
     if output_dir:
         config_path = osp.splitext(args.config_file)[0]
-        config_path = config_path.replace('configs', 'outputs')
+        config_path = config_path.replace('configs', 'outputs_debug')
         output_dir_merge = output_dir.replace('@', config_path)+'_merge'
         os.makedirs(output_dir_merge, exist_ok=True)
-        output_dir = osp.join('outputs/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
+        output_dir = osp.join('../outputs_debug/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
         os.makedirs(output_dir, exist_ok=True)
 
     logger = setup_logger('shaper', output_dir_merge, prefix='train')
