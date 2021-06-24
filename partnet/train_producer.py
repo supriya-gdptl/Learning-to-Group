@@ -649,11 +649,13 @@ def train_one_epoch(model,
             logger.info(
                 meters.delimiter.join(
                     [
+                        'epoch: {}',
                         'iter: {iter:4d}',
                         '{meters}',
                         'max mem: {memory:.0f}',
                     ]
                 ).format(
+                    epoch=cur_epoch,
                     iter=iteration,
                     meters=str(meters),
                     memory=torch.cuda.max_memory_allocated() / (1024.0 ** 2),
@@ -724,12 +726,13 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
     tensorboard_logger = TensorboardLogger(output_dir_merge)
 
     # train
-    max_epoch = 2  # 20000
+    max_epoch = 800  # 20000
     start_epoch = checkpoint_data_embed.get('epoch', 0)
     best_metric_name = 'best_{}'.format(cfg.TRAIN.VAL_METRIC)
     best_metric = checkpoint_data_embed.get(best_metric_name, None)
     logger.info('Start training from epoch {}'.format(start_epoch))
     for epoch in range(start_epoch, max_epoch):
+        print("\nEPOCH: {}".format(epoch))
         cur_epoch = epoch + 1
         scheduler_embed.step()
         start_time = time.time()

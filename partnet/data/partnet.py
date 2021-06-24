@@ -98,6 +98,7 @@ class PartNetInsSeg(Dataset):
                 fname = files[k]
                 if fname.startswith(self.split) and fname.endswith('h5'):
                     if self.split=='test':
+                        # for testing use 'ins_seg_h5_gt' data
                         folder_path = folder_path.replace('for_detection', 'gt')
                         data_path = osp.join(folder_path, fname)
                         print('loading {}'.format(data_path))

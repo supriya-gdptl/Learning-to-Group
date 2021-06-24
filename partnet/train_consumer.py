@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         '--cfg',
         dest='config_file',
-        default='',
+        default='../configs/pn_stage2_fusion_l3.yaml',
         metavar='FILE',
         help='path to config file',
         type=str,
@@ -134,6 +134,8 @@ def train_one_epoch(
 
     softmax = nn.Softmax()
     end = time.time()
+
+    # set the policy network and rectification network in train mode
     model_merge.train()
     sys.stdout.flush()
     BS = policy_update_bs
@@ -178,6 +180,8 @@ def train_one_epoch(
     policy_reward_pool = rbuffer['policy_reward_pool']
     policy_xyz_pool1 = rbuffer['policy_xyz_pool1']
     policy_xyz_pool2 = rbuffer['policy_xyz_pool2']
+
+    # why range till 20???
     for i in range(20):
         bs2 = 64
         TRAIN_LEN = 1024
@@ -185,9 +189,10 @@ def train_one_epoch(
         TRAIN_LEN_policy = 32
         bs_policy = int(128/policy_update_bs)
 
-        #train binary branch
+        #train binary branch of verification network
         cur_len = xyz_pool1.shape[0]
         cur_train_len = TRAIN_LEN if cur_len > TRAIN_LEN else cur_len
+        # random permutation. It creates an array with range(cu_len) and randomly shuffles its elements
         perm_idx = torch.randperm(cur_len)
         logits1_all = torch.zeros([0]).type(torch.LongTensor).cuda()
         sub_xyz_pool1 = torch.index_select(xyz_pool1, dim=0, index=perm_idx[:cur_train_len])
@@ -230,7 +235,7 @@ def train_one_epoch(
             total_loss_embed.backward()
             optimizer_embed.step()
 
-        #train context branch
+        #train context branch of verification network
         cur_len = context_xyz_pool1.shape[0]
         cur_train_len = TRAIN_LEN if cur_len > TRAIN_LEN else cur_len
         perm_idx = torch.randperm(cur_len)
@@ -300,7 +305,7 @@ def train_one_epoch(
             total_loss_embed.backward()
             optimizer_embed.step()
 
-        #train policy network
+        #train policy network aka rectification network
         cur_len = policy_xyz_pool1.shape[0]
         cur_train_len = TRAIN_LEN_policy if cur_len > TRAIN_LEN_policy else cur_len
         perm_idx = torch.randperm(cur_len)
@@ -326,8 +331,8 @@ def train_one_epoch(
             loss_policy.backward()
             optimizer_embed.step()
 
-        if max_grad_norm > 0:
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
+        # if max_grad_norm > 0:
+        #    nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
 
     train_time = time.time() - end
     meters.update(train_time=train_time)
@@ -353,10 +358,11 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
     set_random_seed(cfg.RNG_SEED)
 
     model_merge = nn.DataParallel(PointNetCls(in_channels=3, out_channels=128)).cuda()
+    logger.info("MODEL_MERGE:\n{}".format(str(model_merge)))
 
     # build optimizer
-    cfg['SCHEDULER']['StepLR']['step_size']=150
-    cfg['SCHEDULER']['MAX_EPOCH']=20000
+    cfg['SCHEDULER']['StepLR']['step_size'] = 150
+    cfg['SCHEDULER']['MAX_EPOCH'] = 800
     optimizer_embed = build_optimizer(cfg, model_merge)
 
     # build lr scheduler
@@ -408,7 +414,7 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
             checkpoint_data_embed[best_metric_name] = best_metric
             checkpointer_embed.save('model_{:03d}'.format(cur_epoch), **checkpoint_data_embed)
 
-    return model
+    #return model
 
 def main():
     args = parse_args()
@@ -425,10 +431,10 @@ def main():
     # replace '@' with config path
     if output_dir:
         config_path = osp.splitext(args.config_file)[0]
-        config_path = config_path.replace('configs', 'outputs')
+        config_path = config_path.replace('configs', 'outputs_debug')
         output_dir_merge = output_dir.replace('@', config_path)+'_merge'
         os.makedirs(output_dir_merge, exist_ok=True)
-        output_dir = osp.join('outputs/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
+        output_dir = osp.join('../outputs_debug/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
         os.makedirs(output_dir, exist_ok=True)
 
     logger = setup_logger('shaper', output_dir_merge, prefix='train')
