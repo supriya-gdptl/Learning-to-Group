@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         '--cfg',
         dest='config_file',
-        default='',
+        default='../configs/pn_stage2_fusion_l2.yaml',
         metavar='FILE',
         help='path to config file',
         type=str,
@@ -157,8 +157,8 @@ def train_one_epoch(model,
     print('load checkpoint from %s'%cur_checkpoint)
     model_merge.eval()
     for iteration, data_batch in enumerate(dataloader):
-        print('epoch: %d, iteration: %d, size of binary: %d, size of context: %d'%(cur_epoch, iteration, len(xyz_pool1), len(context_xyz_pool1)))
-        sys.stdout.flush()
+        # print('epoch: %d, iteration: %d, size of binary: %d, size of context: %d'%(cur_epoch, iteration, len(xyz_pool1), len(context_xyz_pool1)))
+        # sys.stdout.flush()
     #add conditions
         if os.path.exists(checkpoint_txt):
             checkpoint_f = open(checkpoint_txt,'r')
@@ -618,11 +618,13 @@ def train_one_epoch(model,
             logger.info(
                 meters.delimiter.join(
                     [
+                        'epoch: {epoch}',
                         'iter: {iter:4d}',
                         '{meters}',
                         'max mem: {memory:.0f}',
                     ]
                 ).format(
+                    epoch=cur_epoch,
                     iter=iteration,
                     meters=str(meters),
                     memory=torch.cuda.max_memory_allocated() / (1024.0 ** 2),
@@ -648,6 +650,7 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
     model = nn.DataParallel(model).cuda()
 
     model_merge = nn.DataParallel(PointNetCls(in_channels=3, out_channels=128)).cuda()
+    logger.info("MODEL_MERGE:\n{}".format(str(model_merge)))
 
     # build optimizer
     optimizer = build_optimizer(cfg, model)
@@ -692,12 +695,13 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
     tensorboard_logger = TensorboardLogger(output_dir_merge)
 
     # train
-    max_epoch = 20000
+    max_epoch = 500
     start_epoch = checkpoint_data_embed.get('epoch', 0)
     best_metric_name = 'best_{}'.format(cfg.TRAIN.VAL_METRIC)
     best_metric = checkpoint_data_embed.get(best_metric_name, None)
     logger.info('Start training from epoch {}'.format(start_epoch))
     for epoch in range(start_epoch, max_epoch):
+        print("\nEPOCH: {}".format(epoch))
         cur_epoch = epoch + 1
         scheduler_embed.step()
         start_time = time.time()
@@ -735,10 +739,10 @@ def main():
     # replace '@' with config path
     if output_dir:
         config_path = osp.splitext(args.config_file)[0]
-        config_path = config_path.replace('configs', 'outputs')
+        config_path = config_path.replace('configs', 'outputs_debug')
         output_dir_merge = output_dir.replace('@', config_path)+'_merge'
         os.makedirs(output_dir_merge, exist_ok=True)
-        output_dir = osp.join('outputs/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
+        output_dir = osp.join('../outputs_debug/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
         os.makedirs(output_dir, exist_ok=True)
 
     logger = setup_logger('shaper', output_dir_merge, prefix='train')

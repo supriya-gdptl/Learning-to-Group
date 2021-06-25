@@ -649,7 +649,7 @@ def train_one_epoch(model,
             logger.info(
                 meters.delimiter.join(
                     [
-                        'epoch: {}',
+                        'epoch: {epoch}',
                         'iter: {iter:4d}',
                         '{meters}',
                         'max mem: {memory:.0f}',

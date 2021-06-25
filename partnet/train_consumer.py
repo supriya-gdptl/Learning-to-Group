@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         '--cfg',
         dest='config_file',
-        default='../configs/pn_stage2_fusion_l3.yaml',
+        default='../configs/pn_stage2_fusion_l2.yaml',
         metavar='FILE',
         help='path to config file',
         type=str,
@@ -362,7 +362,7 @@ def train(cfg, output_dir='', output_dir_merge='', output_dir_refine=''):
 
     # build optimizer
     cfg['SCHEDULER']['StepLR']['step_size'] = 150
-    cfg['SCHEDULER']['MAX_EPOCH'] = 800
+    cfg['SCHEDULER']['MAX_EPOCH'] = 500
     optimizer_embed = build_optimizer(cfg, model_merge)
 
     # build lr scheduler
