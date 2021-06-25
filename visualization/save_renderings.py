@@ -88,7 +88,7 @@ def save_open3d_images_of_pointcloud(category, predicted_mask_basepath, main_out
     pts = h5py.File(points_path, mode='r')['pts'][...]
 
     # save images for all granularity. level of part segmentation granularity (level=1: coarser, level=3: finer)
-    for level in [3]:
+    for level in [1]:
         # create output folder
         output_folder = os.path.join(main_output_folder, category, f"Level_{level}")
         print("output_folder:", os.path.abspath(output_folder))

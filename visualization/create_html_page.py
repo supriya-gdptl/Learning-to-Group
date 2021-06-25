@@ -96,7 +96,7 @@ def get_partnet_results_data(category, rendering_folder):
     html_dict['image_name'] = []
     html_dict['image_idx'] = []
     html_dict['level'] = []
-    for level in [3]:
+    for level in [1]:
         # list directory
         folder = f"{rendering_folder}/{category}/Level_{level}"
         image_folder = f"../../www/{folder}"
