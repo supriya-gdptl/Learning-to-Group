@@ -1,6 +1,8 @@
 from subprocess import Popen
-
-p = Popen('python partnet/test_remote.py --cfg test_configs/l2_bed.yaml', shell=True)
+import os
+os.system('python partnet/test_remote.py --cfg test_configs/l2_bed.yaml')
+# p = Popen('python partnet/test_remote.py --cfg test_configs/l2_bed.yaml', shell=True)
+'''
 p.wait()
 p = Popen('python partnet/test_remote.py --cfg test_configs/l2_bag.yaml', shell=True)
 p.wait()
@@ -48,4 +50,5 @@ p = Popen('python partnet/test_remote.py --cfg test_configs/l2_vase.yaml', shell
 p.wait()
 p = Popen('python partnet/test_remote.py --cfg test_configs/l2_table.yaml', shell=True)
 p.wait()
+'''
 print('success')

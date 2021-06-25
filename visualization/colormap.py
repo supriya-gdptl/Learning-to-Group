@@ -1,4 +1,4 @@
-# This code is copied from "https://github.com/roytseng-tw/Detectron.pytorch/blob/master/lib/utils/colormap.py"
+# This code is borrowed from "https://github.com/roytseng-tw/Detectron.pytorch/blob/master/lib/utils/colormap.py"
 
 # Copyright (c) 2017-present, Facebook, Inc.
 #

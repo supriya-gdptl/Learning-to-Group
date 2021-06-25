@@ -1,8 +1,13 @@
 from subprocess import Popen
+import os
 
+# os.system('python partnet/test.py --cfg test_configs/l3_bed.yaml')
+os.system('python partnet/test.py --cfg test_configs/l3_table.yaml')
+os.system('python partnet/test.py --cfg test_configs/l3_faucet.yaml')
+
+'''
 p = Popen('python partnet/test.py --cfg test_configs/l3_bed.yaml', shell=True)
 p.wait()
-
 p = Popen('python partnet/test.py --cfg test_configs/l3_bag.yaml', shell=True)
 p.wait()
 p = Popen('python partnet/test.py --cfg test_configs/l3_clock.yaml', shell=True)
@@ -49,5 +54,6 @@ p = Popen('python partnet/test.py --cfg test_configs/l3_vase.yaml', shell=True)
 p.wait()
 p = Popen('python partnet/test.py --cfg test_configs/l3_table.yaml', shell=True)
 p.wait()
+'''
 print('success')
 

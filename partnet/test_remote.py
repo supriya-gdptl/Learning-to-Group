@@ -552,11 +552,11 @@ def main():
     # Replace '@' with config path
     if output_dir:
         config_path = osp.splitext(args.config_file)[0]
-        config_path = config_path.replace('configs', 'outputs')
-        output_dir_merge = 'outputs/pn_stage2_fusion_l%d_merge'%cfg.TEST.LEVEL
+        config_path = config_path.replace('configs', 'outputs_debug')
+        output_dir_merge = 'outputs_debug/pn_stage2_fusion_l%d_merge'%cfg.TEST.LEVEL
         os.makedirs(output_dir_merge, exist_ok=True)
-        output_dir = osp.join('outputs/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
-        output_dir_save = './results/'+cfg.DATASET.PartNetInsSeg.TEST.shape
+        output_dir = osp.join('outputs_debug/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
+        output_dir_save = './results_debug/'+cfg.DATASET.PartNetInsSeg.TEST.shape
         os.makedirs(output_dir_save, exist_ok=True)
         output_dir_save = osp.join(output_dir_save,'Level_%d'%cfg.TEST.LEVEL)
         os.makedirs(output_dir_save, exist_ok=True)
@@ -571,5 +571,7 @@ def main():
     assert cfg.TASK == 'ins_seg_3d'
     test(cfg, output_dir, output_dir_merge, output_dir_save)
 
+
 if __name__ == '__main__':
     main()
+

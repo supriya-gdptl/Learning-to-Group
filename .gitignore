@@ -31,9 +31,11 @@ dist/
 # project dirs
 /data
 !/data/*.sh
-/outputs
-scheduler.sh
+
+outputs*
+*.sh
 *.out
 *.csv
-results/
-previous_results/
+results*
+previous_results*
+pretrained*
