@@ -16,7 +16,7 @@ from IPython import embed
 
 
 class PartNetInsSeg(Dataset):
-    cat_file = './shape_names.txt'
+    cat_file = '../shape_names.txt'
 
     def __init__(self,
                  root_dir,
