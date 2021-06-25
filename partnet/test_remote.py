@@ -174,7 +174,7 @@ def test(cfg, output_dir='', output_dir_merge='', output_dir_save=''):
         start_time = time.time()
         end = start_time
         for iteration, data_batch in enumerate(test_dataloader):
-            print(iteration)
+            print("batch: ",iteration)
 
             data_time = time.time() - end
             iter_start_time = time.time()
@@ -545,6 +545,7 @@ def main():
     from partnet.config.ins_seg_3d import cfg
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+    cfg.DATASET.PartNetInsSeg.TRAIN.stage1 = "fusion_debug"
     purge_cfg(cfg)
     cfg.freeze()
 
@@ -553,7 +554,9 @@ def main():
     if output_dir:
         config_path = osp.splitext(args.config_file)[0]
         config_path = config_path.replace('configs', 'outputs_debug')
-        output_dir_merge = 'outputs_debug/pn_stage2_fusion_l%d_merge'%cfg.TEST.LEVEL
+        # output_dir_merge = 'outputs_debug/pn_stage2_fusion_l%d_merge'%cfg.TEST.LEVEL
+        output_dir_merge = 'outputs_debug/pn_stage2_fusion_l3_merge'
+        print("Using l3 trained model to test on l2 shape. merge_dir=", output_dir_merge)
         os.makedirs(output_dir_merge, exist_ok=True)
         output_dir = osp.join('outputs_debug/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)
         output_dir_save = './results_debug/'+cfg.DATASET.PartNetInsSeg.TEST.shape
