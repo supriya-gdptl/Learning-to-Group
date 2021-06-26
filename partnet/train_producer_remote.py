@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         '--cfg',
         dest='config_file',
-        default='../configs/pn_stage2_fusion_l2.yaml',
+        default='../configs/pn_stage2_fusion_l1.yaml',
         metavar='FILE',
         help='path to config file',
         type=str,

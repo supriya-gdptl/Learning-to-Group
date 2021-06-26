@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument(
         '--cfg',
         dest='config_file',
-        default='../configs/pn_stage2_fusion_l2.yaml',
+        default='../configs/pn_stage2_fusion_l1.yaml',
         metavar='FILE',
         help='path to config file',
         type=str,
@@ -257,10 +257,13 @@ def train_one_epoch(
             part_xyz1 /=part_xyz1.norm(dim=1).max(dim=-1)[0].unsqueeze(-1).unsqueeze(-1)
             part_xyz2 /=part_xyz2.norm(dim=1).max(dim=-1)[0].unsqueeze(-1).unsqueeze(-1)
             part_xyz /=part_xyz.norm(dim=1).max(dim=-1)[0].unsqueeze(-1).unsqueeze(-1)
+            # get verification from main standard binary branch
             logits1 = model_merge(part_xyz1,'backbone')
             logits2 = model_merge(part_xyz2,'backbone')
+            # verification context branch
             context_xyz = torch.index_select(sub_context_context_xyz_pool, dim=0, index=perm_idx[i*bs2:(i+1)*bs2]).cuda()
             context_logits = model_merge(context_xyz,'backbone2')
+            # concatenate predictions from binary branch and context branch and do final prediction
             merge_logits = model_merge(torch.cat([part_xyz, torch.cat([logits1.detach().unsqueeze(-1).expand(-1,-1,part_xyz1.shape[-1]), logits2.detach().unsqueeze(-1).expand(-1,-1,part_xyz2.shape[-1])], dim=-1), torch.cat([context_logits.unsqueeze(-1).expand(-1,-1,part_xyz.shape[-1])], dim=-1)], dim=1), 'head2')
             _, p = torch.max(merge_logits, 1)
             logits1_all = torch.cat([logits1_all, p],dim=0)

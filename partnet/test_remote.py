@@ -555,7 +555,7 @@ def main():
         config_path = osp.splitext(args.config_file)[0]
         config_path = config_path.replace('configs', 'outputs_debug')
         # output_dir_merge = 'outputs_debug/pn_stage2_fusion_l%d_merge'%cfg.TEST.LEVEL
-        output_dir_merge = 'outputs_debug/pn_stage2_fusion_l3_merge'
+        output_dir_merge = 'outputs_debug/pn_stage2_fusion_l2_merge'
         print("Using l3 trained model to test on l2 shape. merge_dir=", output_dir_merge)
         os.makedirs(output_dir_merge, exist_ok=True)
         output_dir = osp.join('outputs_debug/stage1/', cfg.DATASET.PartNetInsSeg.TRAIN.stage1)

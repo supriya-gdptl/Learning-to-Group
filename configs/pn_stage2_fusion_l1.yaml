@@ -20,13 +20,13 @@ MODEL:
 INPUT:
   IN_CHANNELS: 3
 DATASET:
-  ROOT_DIR: "data/partnet/ins_seg_h5_for_detection"
+  ROOT_DIR: "../../../data/partnet/ins_seg_h5_for_detection"
   TYPE: "PartNetInsSeg"
   PartNetInsSeg:
     TRAIN:
       split: "train"
       shape: ["Chair","Lamp","StorageFurniture"]
-      stage1: "fusion"
+      stage1: "fusion_debug"
       level: 1
     VAL:
       split: "val"

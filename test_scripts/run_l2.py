@@ -1,6 +1,8 @@
 from subprocess import Popen
 import os
-os.system('python partnet/test_remote.py --cfg test_configs/l2_bed.yaml')
+# os.system('python partnet/test_remote.py --cfg test_configs/l2_bed.yaml')
+os.system('python partnet/test_remote.py --cfg test_configs/l2_faucet.yaml')
+
 # p = Popen('python partnet/test_remote.py --cfg test_configs/l2_bed.yaml', shell=True)
 '''
 p.wait()
